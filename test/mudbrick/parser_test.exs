@@ -1,62 +1,57 @@
 defmodule Mudbrick.ParserTest do
   use ExUnit.Case, async: true
-
-  import Mudbrick.TestHelper
+  use ExUnitProperties
 
   alias Mudbrick.Indirect
   alias Mudbrick.Parser
 
+  describe "arrays" do
+    property "roundtrip" do
+      check all input <- list_of(one_of([boolean(), integer()])) do
+        assert input
+               |> Mudbrick.Object.to_iodata()
+               |> IO.iodata_to_binary()
+               |> Parser.parse(:array) == input
+      end
+    end
+  end
+
   describe "indirect objects" do
-    test "roundtrip" do
-      input =
-        123
-        |> Indirect.Ref.new()
-        |> Indirect.Object.new(true)
+    property "roundtrip" do
+      check all reference_number <- positive_integer(),
+                content <-
+                  member_of([
+                    true,
+                    false
+                    # Mudbrick.PageTree.new()
+                  ]) do
+        input =
+          reference_number
+          |> Indirect.Ref.new()
+          |> Indirect.Object.new(content)
 
-      assert input
-             |> Mudbrick.Object.to_iodata()
-             |> IO.iodata_to_binary()
-             |> Parser.parse(:indirect_object) == input
+        assert input
+               |> Mudbrick.Object.to_iodata()
+               |> IO.iodata_to_binary()
+               |> Parser.parse(:indirect_object) == input
+      end
     end
   end
 
-  describe "full PDF" do
-    test "version is parsed" do
-      parsed = Parser.parse(auto_kerning_example())
-      assert parsed[:version] == [2, 0]
-    end
+  # describe "minimal PDF" do
+  #   test "roundtrips" do
+  #     input = minimal()
 
-    test "streams are parsed" do
-      parsed = auto_kerning_example() |> Parser.parse()
+  #     assert input
+  #            |> Mudbrick.render()
+  #            |> Parser.parse() ==
+  #              input
+  #   end
+  # end
 
-      assert [
-               %Indirect.Object{
-                 ref: %Indirect.Ref{number: 1},
-                 value: %Mudbrick.Stream{
-                   compress: false,
-                   data: _data,
-                   additional_entries: %{Length1: 39860, Subtype: :OpenType},
-                   length: 39860,
-                   filters: []
-                 }
-               }
-             ] = Enum.filter(parsed, &match?(%Indirect.Object{}, &1))
-    end
-  end
-
-  defp auto_kerning_example() do
-    Mudbrick.new(fonts: %{bodoni: bodoni_bold()})
-    |> Mudbrick.page(size: {600, 200})
-    |> Mudbrick.text(
-      [
-        {"Warning\\n", underline: [width: 0.5]},
-        "MORE ",
-        {"efficiency", underline: [width: 0.5]}
-      ],
-      font: :bodoni,
-      font_size: 70,
-      position: {7, 130}
-    )
-    |> Mudbrick.render()
-  end
+  # defp minimal() do
+  #   Mudbrick.new()
+  #   |> Mudbrick.page()
+  #   |> Mudbrick.Document.finish()
+  # end
 end

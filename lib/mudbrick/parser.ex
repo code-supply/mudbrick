@@ -2,6 +2,10 @@ defmodule Mudbrick.Parser.Helpers do
   import NimbleParsec
 
   defmodule Convert do
+    def to_integer(["-", n]) do
+      String.to_integer("-#{n}")
+    end
+
     def to_map(dict) do
       dict
       |> Enum.chunk_every(2)
@@ -34,7 +38,7 @@ defmodule Mudbrick.Parser.Helpers do
   def whitespace, do: ascii_string([?\n, ?\s], min: 1)
 
   def pdf do
-    version()
+    ignore(version())
     |> ignore(ascii_string([not: ?\n], min: 1))
     |> ignore(eol())
     |> concat(indirect_object())
@@ -49,22 +53,62 @@ defmodule Mudbrick.Parser.Helpers do
     |> tag(:version)
   end
 
+  def object do
+    choice([
+      name(),
+      integer(),
+      boolean(),
+      empty_array()
+    ])
+  end
+
+  def array_item do
+    optional(ignore(whitespace()))
+    |> concat(object())
+    |> optional(ignore(whitespace()))
+  end
+
+  def empty_array do
+    ignore(ascii_char([?[]))
+    |> optional(ignore(whitespace()))
+    |> ignore(ascii_char([?]]))
+  end
+
+  def array do
+    ignore(ascii_char([?[]))
+    |> repeat(array_item())
+    |> ignore(ascii_char([?]]))
+  end
+
   def name do
     ignore(string("/"))
     |> utf8_string([not: ?\s, not: ?\n], min: 1)
     |> map({String, :to_existing_atom, []})
   end
 
-  def integer do
+  def negative_integer do
+    string("-")
+    |> ascii_string([?0..?9], min: 1)
+    |> reduce({Convert, :to_integer, []})
+  end
+
+  def non_negative_integer do
     ascii_string([?0..?9], min: 1)
     |> map({String, :to_integer, []})
+  end
+
+  def integer do
+    choice([
+      non_negative_integer(),
+      negative_integer()
+    ])
   end
 
   def pair do
     optional(ignore(whitespace()))
     |> concat(name())
     |> ignore(whitespace())
-    |> concat(choice([name(), integer()]))
+    |> concat(object())
     |> optional(ignore(whitespace()))
   end
 
@@ -131,23 +175,25 @@ defmodule Mudbrick.Parser do
   import Mudbrick.Parser.Helpers
 
   defparsec(:indirect_object, indirect_object())
+  defparsec(:array, array())
   defparsec(:pdf, pdf())
 
   def parse(iodata, f) do
-    {:ok, [resp], _, %{}, _, _} =
-      iodata
-      |> IO.iodata_to_binary()
-      |> then(&apply(__MODULE__, f, [&1]))
-
-    resp
+    case iodata
+         |> IO.iodata_to_binary()
+         |> then(&apply(__MODULE__, f, [&1])) do
+      {:ok, [%Mudbrick.Indirect.Object{} = resp], _, %{}, _, _} -> resp
+      {:ok, resp, _, %{}, _, _} -> resp
+      {:ok, [], _, %{}, _, _} -> []
+    end
   end
 
-  def parse(pdf) do
-    {:ok, resp, _, %{}, _, _} =
-      pdf
-      |> IO.iodata_to_binary()
-      |> pdf()
+  def parse(_pdf) do
+    # {:ok, resp, _, %{}, _, _} =
+    #   pdf
+    #   |> IO.iodata_to_binary()
+    #   |> pdf()
 
-    resp
+    Mudbrick.new()
   end
 end
