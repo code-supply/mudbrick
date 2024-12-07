@@ -16,17 +16,19 @@ defmodule Mudbrick.Parser.Helpers do
   def name do
     ignore(string("/"))
     |> utf8_string([not: ?\s, not: ?\n], min: 1)
+    |> map({String, :to_existing_atom, []})
   end
 
-  def number do
+  def integer do
     ascii_string([?0..?9], min: 1)
+    |> map({String, :to_integer, []})
   end
 
   def pair do
     optional(ignore(whitespace()))
     |> concat(name())
     |> ignore(whitespace())
-    |> concat(choice([name(), number()]))
+    |> concat(choice([name(), integer()]))
     |> optional(ignore(whitespace()))
     |> tag(:pair)
   end
@@ -35,6 +37,7 @@ defmodule Mudbrick.Parser.Helpers do
     ignore(string("<<"))
     |> repeat(pair())
     |> ignore(string(">>"))
+    |> tag(:dictionary)
   end
 
   def object do
