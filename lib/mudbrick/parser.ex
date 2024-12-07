@@ -2,6 +2,7 @@ defmodule Mudbrick.Parser.Helpers do
   import NimbleParsec
 
   def eol, do: string("\n")
+  def whitespace, do: ascii_string([?\n, ?\s], min: 1)
 
   def version do
     ignore(string("%PDF-"))
@@ -12,12 +13,38 @@ defmodule Mudbrick.Parser.Helpers do
     |> tag(:version)
   end
 
-  def object_start do
+  def name do
+    ignore(string("/"))
+    |> utf8_string([not: ?\s, not: ?\n], min: 1)
+  end
+
+  def number do
+    ascii_string([?0..?9], min: 1)
+  end
+
+  def pair do
+    optional(ignore(whitespace()))
+    |> concat(name())
+    |> ignore(whitespace())
+    |> concat(choice([name(), number()]))
+    |> optional(ignore(whitespace()))
+    |> tag(:pair)
+  end
+
+  def dictionary do
+    ignore(string("<<"))
+    |> repeat(pair())
+    |> ignore(string(">>"))
+  end
+
+  def object do
     integer(min: 1)
-    |> ignore(string(" "))
+    |> ignore(whitespace())
     |> integer(min: 1)
-    |> string(" obj")
+    |> ignore(whitespace())
+    |> string("obj")
     |> ignore(eol())
+    |> concat(optional(dictionary()))
     |> tag(:object)
   end
 end
@@ -26,12 +53,14 @@ defmodule Mudbrick.Parser do
   import NimbleParsec
   import Mudbrick.Parser.Helpers
 
+  defparsec(:pair, pair())
+
   defparsec(
     :pdf,
     version()
-    |> ignore(ascii_string([not: 10..10], min: 1))
+    |> ignore(ascii_string([not: ?\n], min: 1))
     |> ignore(eol())
-    |> concat(object_start())
+    |> concat(object())
   )
 
   def parse(pdf) do
