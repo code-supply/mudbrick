@@ -3,51 +3,44 @@ defmodule Mudbrick.ParserTest do
 
   import Mudbrick.TestHelper
 
+  alias Mudbrick.Indirect
   alias Mudbrick.Parser
 
-  test "can parse version" do
-    parsed =
-      auto_kerning_example()
-      |> Parser.parse()
+  describe "indirect objects" do
+    test "roundtrip" do
+      input =
+        123
+        |> Indirect.Ref.new()
+        |> Indirect.Object.new(true)
 
-    assert parsed[:version] == [2, 0]
+      assert input
+             |> Mudbrick.Object.to_iodata()
+             |> IO.iodata_to_binary()
+             |> Parser.parse(:indirect_object) == input
+    end
   end
 
-  describe "objects" do
-    test "parse" do
-      parsed = auto_kerning_example() |> Parser.parse()
-
-      [
-        object: [
-          1,
-          0,
-          "obj",
-          %{
-            Subtype: :OpenType,
-            Length: 39860,
-            Length1: 39860
-          },
-          "stream",
-          blob
-        ]
-      ] = Enum.filter(parsed, &match?({:object, _}, &1))
-
-      binary_slice(blob, -10, 10)
-
-      OpenType.new() |> OpenType.parse(blob)
+  describe "full PDF" do
+    test "version is parsed" do
+      parsed = Parser.parse(auto_kerning_example())
+      assert parsed[:version] == [2, 0]
     end
 
-    test "parse with multiple spaces separating version and revision etc." do
-      parsed =
-        """
-        %PDF-2.0
-        %ï¿½ï¿½ï¿½ï¿½
-        1    099       obj
-        endobj
-        """
-        |> Parser.parse()
+    test "streams are parsed" do
+      parsed = auto_kerning_example() |> Parser.parse()
 
-      assert parsed[:object] == [1, 99, "obj"]
+      assert [
+               %Indirect.Object{
+                 ref: %Indirect.Ref{number: 1},
+                 value: %Mudbrick.Stream{
+                   compress: false,
+                   data: _data,
+                   additional_entries: %{Length1: 39860, Subtype: :OpenType},
+                   length: 39860,
+                   filters: []
+                 }
+               }
+             ] = Enum.filter(parsed, &match?(%Indirect.Object{}, &1))
     end
   end
 

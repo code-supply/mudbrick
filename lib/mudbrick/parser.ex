@@ -1,6 +1,35 @@
 defmodule Mudbrick.Parser.Helpers do
   import NimbleParsec
 
+  defmodule Convert do
+    def to_map(dict) do
+      dict
+      |> Enum.chunk_every(2)
+      |> Enum.map(&List.to_tuple/1)
+      |> Map.new()
+    end
+
+    def to_boolean("true"), do: true
+    def to_boolean("false"), do: false
+
+    def to_indirect_object([ref_number, _version, contents]) do
+      ref_number
+      |> Mudbrick.Indirect.Ref.new()
+      |> Mudbrick.Indirect.Object.new(contents)
+    end
+
+    def to_indirect_object([ref_number, _version, %{} = dict, "stream", data]) do
+      ref_number
+      |> Mudbrick.Indirect.Ref.new()
+      |> Mudbrick.Indirect.Object.new(
+        Mudbrick.Stream.new(
+          data: data,
+          additional_entries: Map.drop(dict, [:Length])
+        )
+      )
+    end
+  end
+
   def eol, do: string("\n")
   def whitespace, do: ascii_string([?\n, ?\s], min: 1)
 
@@ -8,7 +37,7 @@ defmodule Mudbrick.Parser.Helpers do
     version()
     |> ignore(ascii_string([not: ?\n], min: 1))
     |> ignore(eol())
-    |> concat(object())
+    |> concat(indirect_object())
   end
 
   def version do
@@ -43,14 +72,7 @@ defmodule Mudbrick.Parser.Helpers do
     ignore(string("<<"))
     |> repeat(pair())
     |> ignore(string(">>"))
-    |> reduce({:dictionary_to_map, []})
-  end
-
-  def dictionary_to_map(dict) do
-    dict
-    |> Enum.chunk_every(2)
-    |> Enum.map(&List.to_tuple/1)
-    |> Map.new()
+    |> reduce({Convert, :to_map, []})
   end
 
   def stream do
@@ -77,15 +99,30 @@ defmodule Mudbrick.Parser.Helpers do
     }
   end
 
-  def object do
+  def boolean do
+    choice([
+      string("true"),
+      string("false")
+    ])
+    |> map({Convert, :to_boolean, []})
+  end
+
+  def indirect_object do
     integer(min: 1)
     |> ignore(whitespace())
     |> integer(min: 1)
     |> ignore(whitespace())
-    |> string("obj")
+    |> ignore(string("obj"))
     |> ignore(eol())
-    |> concat(optional(stream()))
-    |> tag(:object)
+    |> concat(
+      choice([
+        boolean(),
+        stream()
+      ])
+    )
+    |> ignore(eol())
+    |> ignore(string("endobj"))
+    |> reduce({Convert, :to_indirect_object, []})
   end
 end
 
@@ -93,7 +130,17 @@ defmodule Mudbrick.Parser do
   import NimbleParsec
   import Mudbrick.Parser.Helpers
 
+  defparsec(:indirect_object, indirect_object())
   defparsec(:pdf, pdf())
+
+  def parse(iodata, f) do
+    {:ok, [resp], _, %{}, _, _} =
+      iodata
+      |> IO.iodata_to_binary()
+      |> then(&apply(__MODULE__, f, [&1]))
+
+    resp
+  end
 
   def parse(pdf) do
     {:ok, resp, _, %{}, _, _} =
