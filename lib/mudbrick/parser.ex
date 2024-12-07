@@ -4,6 +4,13 @@ defmodule Mudbrick.Parser.Helpers do
   def eol, do: string("\n")
   def whitespace, do: ascii_string([?\n, ?\s], min: 1)
 
+  def pdf do
+    version()
+    |> ignore(ascii_string([not: ?\n], min: 1))
+    |> ignore(eol())
+    |> concat(object())
+  end
+
   def version do
     ignore(string("%PDF-"))
     |> integer(1)
@@ -30,14 +37,44 @@ defmodule Mudbrick.Parser.Helpers do
     |> ignore(whitespace())
     |> concat(choice([name(), integer()]))
     |> optional(ignore(whitespace()))
-    |> tag(:pair)
   end
 
   def dictionary do
     ignore(string("<<"))
     |> repeat(pair())
     |> ignore(string(">>"))
-    |> tag(:dictionary)
+    |> reduce({:dictionary_to_map, []})
+  end
+
+  def dictionary_to_map(dict) do
+    dict
+    |> Enum.chunk_every(2)
+    |> Enum.map(&List.to_tuple/1)
+    |> Map.new()
+  end
+
+  def stream do
+    dictionary()
+    |> ignore(whitespace())
+    |> string("stream")
+    |> ignore(eol())
+    |> post_traverse({:stream_contents, []})
+    |> ignore(eol())
+    |> ignore(string("endstream"))
+  end
+
+  def stream_contents(
+        rest,
+        ["stream", %{Length: bytes_to_read}] = results,
+        context,
+        _line,
+        _offset
+      ) do
+    {
+      binary_slice(rest, bytes_to_read..-1//1),
+      [binary_slice(rest, 0, bytes_to_read) | results],
+      context
+    }
   end
 
   def object do
@@ -47,7 +84,7 @@ defmodule Mudbrick.Parser.Helpers do
     |> ignore(whitespace())
     |> string("obj")
     |> ignore(eol())
-    |> concat(optional(dictionary()))
+    |> concat(optional(stream()))
     |> tag(:object)
   end
 end
@@ -56,15 +93,7 @@ defmodule Mudbrick.Parser do
   import NimbleParsec
   import Mudbrick.Parser.Helpers
 
-  defparsec(:pair, pair())
-
-  defparsec(
-    :pdf,
-    version()
-    |> ignore(ascii_string([not: ?\n], min: 1))
-    |> ignore(eol())
-    |> concat(object())
-  )
+  defparsec(:pdf, pdf())
 
   def parse(pdf) do
     {:ok, resp, _, %{}, _, _} =

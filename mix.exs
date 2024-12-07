@@ -40,7 +40,7 @@ defmodule Mudbrick.MixProject do
       {:ex_doc, "~> 0.21", only: [:dev], runtime: false},
       {:ex_image_info, "~> 0.2"},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false},
-      {:nimble_parsec, "~> 1.0", runtime: false},
+      {:nimble_parsec, github: "dashbitco/nimble_parsec", runtime: false, override: true},
       {:opentype, "~> 0.5"},
       {:stream_data, "~> 1.0", only: [:dev, :test]}
     ]
