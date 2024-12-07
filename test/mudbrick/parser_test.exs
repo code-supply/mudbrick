@@ -14,34 +14,39 @@ defmodule Mudbrick.ParserTest do
   end
 
   test "pair" do
-    assert {:ok, [pair: ["Foo", "Bar"]], _, %{}, _, _} =
-             Parser.pair("/Foo /Bar")
+    assert {:ok, [pair: [:Length, 123]], _, %{}, _, _} =
+             Parser.pair("/Length 123")
 
-    assert {:ok, [pair: ["Foo", "Bar"]], _, %{}, _, _} =
-             Parser.pair(" /Foo /Bar")
+    assert {:ok, [pair: [:Length1, :Subtype]], _, %{}, _, _} =
+             Parser.pair(" /Length1 /Subtype")
 
-    assert {:ok, [pair: ["Foo", "Bar"]], _, %{}, _, _} =
-             Parser.pair("/Foo    /Bar")
+    assert {:ok, [pair: [:Name, :Type]], _, %{}, _, _} =
+             Parser.pair("/Name    /Type")
 
-    assert {:ok, [pair: ["Foo", "Bar"]], _, %{}, _, _} =
-             Parser.pair("  /Foo    /Bar  ")
+    assert {:ok, [pair: [:CIDFontType0, 143]], _, %{}, _, _} =
+             Parser.pair("  /CIDFontType0    143  ")
+  end
+
+  describe "streams" do
   end
 
   describe "objects" do
     test "parse" do
       parsed = auto_kerning_example() |> Parser.parse()
 
-      assert [
-               version: [2, 0],
+      assert parsed |> Enum.filter(fn {k, _v} -> k == :object end) == [
                object: [
                  1,
                  0,
                  "obj",
-                 {:pair, ["Subtype", "OpenType"]},
-                 {:pair, ["Length", "39860"]},
-                 {:pair, ["Length1", "39860"]}
+                 {:dictionary,
+                  [
+                    {:pair, [:Subtype, :OpenType]},
+                    {:pair, [:Length, 39860]},
+                    {:pair, [:Length1, 39860]}
+                  ]}
                ]
-             ] = parsed
+             ]
     end
 
     test "parse with multiple spaces separating version and revision etc." do
