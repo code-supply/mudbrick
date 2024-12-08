@@ -152,6 +152,7 @@ defmodule Mudbrick.Parser do
       |> parsec(:object)
       |> tag(:pair)
     )
+    |> optional(ignore(whitespace()))
     |> ignore(string(">>"))
     |> tag(:dictionary)
   )
@@ -180,6 +181,14 @@ defmodule Mudbrick.Parser do
   defp ast_to_mudbrick(x) when is_tuple(x), do: ast_to_mudbrick([x])
   defp ast_to_mudbrick(array: a), do: Enum.map(a, &ast_to_mudbrick/1)
   defp ast_to_mudbrick(boolean: b), do: b
+  defp ast_to_mudbrick(dictionary: []), do: %{}
+
+  defp ast_to_mudbrick(dictionary: pairs) do
+    for {:pair, [k, v]} <- pairs, into: %{} do
+      {ast_to_mudbrick(k), ast_to_mudbrick(v)}
+    end
+  end
+
   defp ast_to_mudbrick(integer: [n]), do: String.to_integer(n)
   defp ast_to_mudbrick(integer: ["-", n]), do: -String.to_integer(n)
   defp ast_to_mudbrick(name: s), do: String.to_atom(s)
