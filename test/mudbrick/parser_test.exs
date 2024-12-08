@@ -1,12 +1,47 @@
 defmodule Mudbrick.ParserTest do
   use ExUnit.Case, async: true
-  use ExUnitProperties
 
   alias Mudbrick.Parser
 
   describe "parsing to AST" do
     test "booleans" do
       assert Parser.parse("true", :boolean) == [boolean: true]
+    end
+
+    test "empty dictionary" do
+      assert Parser.parse("<<>>", :dictionary) == [{:dictionary, []}]
+    end
+
+    test "nonempty dictionary" do
+      assert Parser.parse("<</Name 123 /Type /Font>>", :dictionary) ==
+               [
+                 dictionary: [
+                   {:pair, [name: "Name", integer: ["123"]]},
+                   {:pair, [name: "Type", name: "Font"]}
+                 ]
+               ]
+    end
+
+    test "dictionary in a dictionary" do
+      assert Parser.parse("<</Font <</Type /CIDFont>>>>", :dictionary) ==
+               [
+                 dictionary: [
+                   pair: [
+                     name: "Font",
+                     dictionary: [
+                       {:pair,
+                        [
+                          name: "Type",
+                          name: "CIDFont"
+                        ]}
+                     ]
+                   ]
+                 ]
+               ]
+    end
+
+    test "empty array" do
+      assert Parser.parse("[]", :array) == [{:array, []}]
     end
 
     test "empty array inside array" do
@@ -25,11 +60,19 @@ defmodule Mudbrick.ParserTest do
              ]
     end
   end
+end
+
+defmodule Mudbrick.ParseRoundtripTest do
+  use ExUnit.Case, async: true
+  use ExUnitProperties
+
+  alias Mudbrick.Parser
 
   describe "roundtripping from/to Mudbrick" do
     property "objects" do
       base_object =
         one_of([
+          atom(:alphanumeric),
           boolean(),
           integer()
         ])
@@ -39,6 +82,7 @@ defmodule Mudbrick.ParserTest do
                     base_object,
                     list_of(base_object),
                     list_of(list_of(base_object))
+                    # map_of(atom(:alphanumeric), base_object)
                   ]) do
         assert input
                |> Mudbrick.Object.to_iodata()

@@ -2,17 +2,6 @@ defmodule Mudbrick.Parser.Helpers do
   import NimbleParsec
 
   defmodule Convert do
-    def to_integer(["-", n]) do
-      String.to_integer("-#{n}")
-    end
-
-    def to_map(dict) do
-      dict
-      |> Enum.chunk_every(2)
-      |> Enum.map(&List.to_tuple/1)
-      |> Map.new()
-    end
-
     def to_indirect_object([ref_number, _version, contents]) do
       ref_number
       |> Mudbrick.Indirect.Ref.new()
@@ -50,18 +39,21 @@ defmodule Mudbrick.Parser.Helpers do
     |> tag(:version)
   end
 
-  def empty_array do
-    ascii_char([?[])
-    |> optional(ignore(whitespace()))
-    |> ascii_char([?]])
-    |> replace([])
-    |> unwrap_and_tag(:array)
-  end
-
   def name do
     ignore(string("/"))
-    |> utf8_string([not: ?\s, not: ?\n, not: ?], not: ?[, not: ?/], min: 1)
-    |> map({String, :to_existing_atom, []})
+    |> utf8_string(
+      [
+        not: ?\s,
+        not: ?\n,
+        not: ?],
+        not: ?[,
+        not: ?/,
+        not: ?<,
+        not: ?>
+      ],
+      min: 1
+    )
+    |> unwrap_and_tag(:name)
   end
 
   def non_negative_integer do
@@ -80,21 +72,6 @@ defmodule Mudbrick.Parser.Helpers do
     ])
     |> tag(:integer)
   end
-
-  # def pair do
-  #   optional(ignore(whitespace()))
-  #   |> concat(name())
-  #   |> ignore(whitespace())
-  #   |> concat(object())
-  #   |> optional(ignore(whitespace()))
-  # end
-
-  # def dictionary do
-  #   ignore(string("<<"))
-  #   |> repeat(pair())
-  #   |> ignore(string(">>"))
-  #   |> reduce({Convert, :to_map, []})
-  # end
 
   # def stream do
   #   dictionary()
@@ -166,12 +143,27 @@ defmodule Mudbrick.Parser do
   )
 
   defparsec(
+    :dictionary,
+    ignore(string("<<"))
+    |> repeat(
+      optional(ignore(whitespace()))
+      |> concat(name())
+      |> ignore(whitespace())
+      |> parsec(:object)
+      |> tag(:pair)
+    )
+    |> ignore(string(">>"))
+    |> tag(:dictionary)
+  )
+
+  defparsec(
     :object,
     choice([
       name(),
       integer(),
       boolean(),
-      parsec(:array)
+      parsec(:array),
+      parsec(:dictionary)
     ])
   )
 
@@ -190,4 +182,5 @@ defmodule Mudbrick.Parser do
   defp ast_to_mudbrick(boolean: b), do: b
   defp ast_to_mudbrick(integer: [n]), do: String.to_integer(n)
   defp ast_to_mudbrick(integer: ["-", n]), do: -String.to_integer(n)
+  defp ast_to_mudbrick(name: s), do: String.to_atom(s)
 end
