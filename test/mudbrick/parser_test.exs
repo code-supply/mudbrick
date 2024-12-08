@@ -81,8 +81,9 @@ defmodule Mudbrick.ParseRoundtripTest do
                   one_of([
                     base_object,
                     list_of(base_object),
-                    list_of(list_of(base_object))
-                    # map_of(atom(:alphanumeric), base_object)
+                    list_of(list_of(base_object)),
+                    map_of(atom(:alphanumeric), base_object),
+                    map_of(atom(:alphanumeric), map_of(atom(:alphanumeric), base_object))
                   ]) do
         assert input
                |> Mudbrick.Object.to_iodata()
