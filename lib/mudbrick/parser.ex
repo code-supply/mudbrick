@@ -1,25 +1,6 @@
 defmodule Mudbrick.Parser.Helpers do
   import NimbleParsec
 
-  defmodule Convert do
-    def to_indirect_object([ref_number, _version, contents]) do
-      ref_number
-      |> Mudbrick.Indirect.Ref.new()
-      |> Mudbrick.Indirect.Object.new(contents)
-    end
-
-    def to_indirect_object([ref_number, _version, %{} = dict, "stream", data]) do
-      ref_number
-      |> Mudbrick.Indirect.Ref.new()
-      |> Mudbrick.Indirect.Object.new(
-        Mudbrick.Stream.new(
-          data: data,
-          additional_entries: Map.drop(dict, [:Length])
-        )
-      )
-    end
-  end
-
   def eol, do: string("\n")
   def whitespace, do: ascii_string([?\n, ?\s], min: 1)
 
@@ -56,6 +37,20 @@ defmodule Mudbrick.Parser.Helpers do
   def negative_integer do
     string("-")
     |> concat(non_negative_integer())
+  end
+
+  def positive_integer do
+    ascii_string([?1..?9], min: 1)
+    |> repeat(non_negative_integer())
+  end
+
+  def indirect_reference do
+    positive_integer()
+    |> ignore(whitespace())
+    |> concat(non_negative_integer())
+    |> ignore(whitespace())
+    |> string("R")
+    |> tag(:indirect_reference)
   end
 
   def integer do
@@ -112,6 +107,7 @@ defmodule Mudbrick.Parser do
     :object,
     choice([
       name(),
+      indirect_reference(),
       integer(),
       boolean(),
       parsec(:array),
@@ -151,14 +147,6 @@ defmodule Mudbrick.Parser do
     |> tag(:indirect_object)
   )
 
-  defparsec(
-    :pdf,
-    ignore(version())
-    |> ignore(ascii_string([not: ?\n], min: 1))
-    |> ignore(eol())
-    |> repeat(parsec(:indirect_object))
-  )
-
   def stream_contents(
         rest,
         [
@@ -169,10 +157,7 @@ defmodule Mudbrick.Parser do
         _line,
         _offset
       ) do
-    dictionary =
-      ast_to_mudbrick({:dictionary, pairs})
-      |> dbg
-
+    dictionary = ast_to_mudbrick({:dictionary, pairs})
     bytes_to_read = dictionary[:Length]
 
     {
@@ -180,6 +165,24 @@ defmodule Mudbrick.Parser do
       [binary_slice(rest, 0, bytes_to_read) | results],
       context
     }
+  end
+
+  defparsec(
+    :pdf,
+    ignore(version())
+    |> ignore(ascii_string([not: ?\n], min: 1))
+    |> ignore(eol())
+    |> repeat(parsec(:indirect_object))
+    |> reduce(:to_pdf)
+  )
+
+  defp to_pdf(_root_objects) do
+    Mudbrick.new()
+  end
+
+  def parse(iodata) do
+    {:ok, [parsed], _rest, %{}, _, _} = iodata |> IO.iodata_to_binary() |> pdf()
+    parsed
   end
 
   def parse(iodata, f) do
@@ -204,6 +207,10 @@ defmodule Mudbrick.Parser do
   end
 
   defp ast_to_mudbrick([]), do: []
+
+  defp ast_to_mudbrick([[{:indirect_object, _} | _rest] = unwrapped]) do
+    ast_to_mudbrick(unwrapped)
+  end
 
   defp ast_to_mudbrick([
          {:indirect_object,
