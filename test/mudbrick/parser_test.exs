@@ -4,6 +4,10 @@ defmodule Mudbrick.ParserTest do
   alias Mudbrick.Parser
 
   describe "parsing to AST" do
+    test "real numbers" do
+      assert Parser.parse("0.1", :real) == [real: ["0", ".", "1"]]
+    end
+
     test "booleans" do
       assert Parser.parse("true", :boolean) == [boolean: true]
     end
@@ -59,6 +63,18 @@ defmodule Mudbrick.ParserTest do
     test "nonempty nested array" do
       assert Parser.parse("[[true false] true]", :array) == [
                {:array, [array: [boolean: true, boolean: false], boolean: true]}
+             ]
+    end
+
+    test "array with negative integers" do
+      assert Parser.parse("[-416 -326 1379 924]", :array) == [
+               {:array,
+                [
+                  integer: ["-", "416"],
+                  integer: ["-", "326"],
+                  integer: ["1379"],
+                  integer: ["924"]
+                ]}
              ]
     end
 
