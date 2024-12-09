@@ -4,6 +4,11 @@ defmodule Mudbrick.ParserTest do
   alias Mudbrick.Parser
 
   describe "parsing to AST" do
+    test "strings bounded by parens" do
+      assert Parser.parse("(hello, world!)", :string) == [string: ["hello, world!"]]
+      assert Parser.parse("()", :string) == [string: []]
+    end
+
     test "real numbers" do
       assert Parser.parse("0.1", :real) == [real: ["0", ".", "1"]]
     end
@@ -21,6 +26,7 @@ defmodule Mudbrick.ParserTest do
                """
                <</Name 123 /Type /Font
                /Pages 1 0 R
+               /Page (hello)
                >>\
                """,
                :dictionary
@@ -29,7 +35,8 @@ defmodule Mudbrick.ParserTest do
                  dictionary: [
                    {:pair, [name: "Name", integer: ["123"]]},
                    {:pair, [name: "Type", name: "Font"]},
-                   {:pair, [name: "Pages", indirect_reference: ["1", "0", "R"]]}
+                   {:pair, [name: "Pages", indirect_reference: ["1", "0", "R"]]},
+                   {:pair, [name: "Page", string: ["hello"]]}
                  ]
                ]
     end

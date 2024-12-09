@@ -71,6 +71,13 @@ defmodule Mudbrick.Parser.Helpers do
     |> tag(:real)
   end
 
+  def string do
+    ignore(string("("))
+    |> optional(ascii_string([not: ?(, not: ?)], min: 1))
+    |> ignore(string(")"))
+    |> tag(:string)
+  end
+
   def boolean do
     choice([
       string("true") |> replace(true),
@@ -86,6 +93,7 @@ defmodule Mudbrick.Parser do
 
   defparsec(:boolean, boolean())
   defparsec(:real, real())
+  defparsec(:string, string())
 
   defparsec(
     :array,
@@ -117,6 +125,7 @@ defmodule Mudbrick.Parser do
   defparsec(
     :object,
     choice([
+      string(),
       name(),
       indirect_reference(),
       real(),
@@ -187,7 +196,8 @@ defmodule Mudbrick.Parser do
     |> repeat(parsec(:indirect_object))
   )
 
-  def parse(_iodata) do
+  def parse(iodata) do
+    _ = iodata |> IO.iodata_to_binary() |> pdf()
     Mudbrick.new()
   end
 
