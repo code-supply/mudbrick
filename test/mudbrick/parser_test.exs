@@ -13,11 +13,19 @@ defmodule Mudbrick.ParserTest do
     end
 
     test "nonempty dictionary" do
-      assert Parser.parse("<</Name 123 /Type /Font>>", :dictionary) ==
+      assert Parser.parse(
+               """
+               <</Name 123 /Type /Font
+               /Pages 1 0 R
+               >>\
+               """,
+               :dictionary
+             ) ==
                [
                  dictionary: [
                    {:pair, [name: "Name", integer: ["123"]]},
-                   {:pair, [name: "Type", name: "Font"]}
+                   {:pair, [name: "Type", name: "Font"]},
+                   {:pair, [name: "Pages", indirect_reference: ["1", "0", "R"]]}
                  ]
                ]
     end
@@ -69,13 +77,29 @@ defmodule Mudbrick.ParseRoundtripTest do
   alias Mudbrick.Parser
 
   describe "roundtripping from/to Mudbrick" do
-    # test "minimal PDF" do
-    #   input = Mudbrick.new()
+    test "minimal PDF" do
+      input = Mudbrick.new()
+
+      assert input
+             |> Mudbrick.render()
+             |> IO.iodata_to_binary()
+             |> Parser.parse() == input
+    end
+
+    # test "PDF with text" do
+    #   alias Mudbrick.TestHelper
+    #   import Mudbrick
+
+    #   input =
+    #     new(fonts: %{bodoni: TestHelper.bodoni_regular()})
+    #     |> page()
+    #     |> text("hello, world!")
+    #     |> Mudbrick.Document.finish()
 
     #   assert input
     #          |> Mudbrick.render()
-    #          |> then(&dbg(IO.iodata_to_binary(&1)))
-    #          |> Parser.to_mudbrick(:pdf) == input
+    #          |> IO.iodata_to_binary()
+    #          |> Parser.parse() == input
     # end
 
     property "objects" do
