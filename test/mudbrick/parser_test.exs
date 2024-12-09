@@ -69,6 +69,15 @@ defmodule Mudbrick.ParseRoundtripTest do
   alias Mudbrick.Parser
 
   describe "roundtripping from/to Mudbrick" do
+    # test "minimal PDF" do
+    #   input = Mudbrick.new()
+
+    #   assert input
+    #          |> Mudbrick.render()
+    #          |> then(&dbg(IO.iodata_to_binary(&1)))
+    #          |> Parser.to_mudbrick(:pdf) == input
+    # end
+
     property "objects" do
       base_object =
         one_of([

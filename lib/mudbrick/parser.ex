@@ -23,13 +23,6 @@ defmodule Mudbrick.Parser.Helpers do
   def eol, do: string("\n")
   def whitespace, do: ascii_string([?\n, ?\s], min: 1)
 
-  # def pdf do
-  #   ignore(version())
-  #   |> ignore(ascii_string([not: ?\n], min: 1))
-  #   |> ignore(eol())
-  #   |> concat(indirect_object())
-  # end
-
   def version do
     ignore(string("%PDF-"))
     |> integer(1)
@@ -73,30 +66,6 @@ defmodule Mudbrick.Parser.Helpers do
     |> tag(:integer)
   end
 
-  # def stream do
-  #   dictionary()
-  #   |> ignore(whitespace())
-  #   |> string("stream")
-  #   |> ignore(eol())
-  #   |> post_traverse({:stream_contents, []})
-  #   |> ignore(eol())
-  #   |> ignore(string("endstream"))
-  # end
-
-  def stream_contents(
-        rest,
-        ["stream", %{Length: bytes_to_read}] = results,
-        context,
-        _line,
-        _offset
-      ) do
-    {
-      binary_slice(rest, bytes_to_read..-1//1),
-      [binary_slice(rest, 0, bytes_to_read) | results],
-      context
-    }
-  end
-
   def boolean do
     choice([
       string("true") |> replace(true),
@@ -104,24 +73,6 @@ defmodule Mudbrick.Parser.Helpers do
     ])
     |> unwrap_and_tag(:boolean)
   end
-
-  # def indirect_object do
-  #   integer(min: 1)
-  #   |> ignore(whitespace())
-  #   |> integer(min: 1)
-  #   |> ignore(whitespace())
-  #   |> ignore(string("obj"))
-  #   |> ignore(eol())
-  #   |> concat(
-  #     choice([
-  #       boolean(),
-  #       stream()
-  #     ])
-  #   )
-  #   |> ignore(eol())
-  #   |> ignore(string("endobj"))
-  #   |> reduce({Convert, :to_indirect_object, []})
-  # end
 end
 
 defmodule Mudbrick.Parser do
@@ -168,6 +119,69 @@ defmodule Mudbrick.Parser do
     ])
   )
 
+  defparsec(
+    :stream,
+    parsec(:dictionary)
+    |> ignore(whitespace())
+    |> string("stream")
+    |> ignore(eol())
+    |> post_traverse({:stream_contents, []})
+    |> ignore(eol())
+    |> ignore(string("endstream"))
+  )
+
+  defparsec(
+    :indirect_object,
+    integer(min: 1)
+    |> ignore(whitespace())
+    |> integer(min: 1)
+    |> ignore(whitespace())
+    |> ignore(string("obj"))
+    |> ignore(eol())
+    |> concat(
+      choice([
+        boolean(),
+        parsec(:stream),
+        parsec(:dictionary)
+      ])
+    )
+    |> ignore(eol())
+    |> ignore(string("endobj"))
+    |> ignore(eol())
+    |> tag(:indirect_object)
+  )
+
+  defparsec(
+    :pdf,
+    ignore(version())
+    |> ignore(ascii_string([not: ?\n], min: 1))
+    |> ignore(eol())
+    |> repeat(parsec(:indirect_object))
+  )
+
+  def stream_contents(
+        rest,
+        [
+          "stream",
+          {:dictionary, pairs}
+        ] = results,
+        context,
+        _line,
+        _offset
+      ) do
+    dictionary =
+      ast_to_mudbrick({:dictionary, pairs})
+      |> dbg
+
+    bytes_to_read = dictionary[:Length]
+
+    {
+      binary_slice(rest, bytes_to_read..-1//1),
+      [binary_slice(rest, 0, bytes_to_read) | results],
+      context
+    }
+  end
+
   def parse(iodata, f) do
     case iodata
          |> IO.iodata_to_binary()
@@ -187,6 +201,42 @@ defmodule Mudbrick.Parser do
     for {:pair, [k, v]} <- pairs, into: %{} do
       {ast_to_mudbrick(k), ast_to_mudbrick(v)}
     end
+  end
+
+  defp ast_to_mudbrick([]), do: []
+
+  defp ast_to_mudbrick([
+         {:indirect_object,
+          [
+            ref_number,
+            _version,
+            {:dictionary, pairs}
+          ]}
+         | rest
+       ]) do
+    [
+      Mudbrick.Indirect.Ref.new(ref_number)
+      |> Mudbrick.Indirect.Object.new(pairs)
+      | ast_to_mudbrick(rest)
+    ]
+  end
+
+  defp ast_to_mudbrick([
+         {:indirect_object,
+          [
+            ref_number,
+            _version,
+            {:dictionary, _pairs},
+            "stream",
+            stream
+          ]}
+         | rest
+       ]) do
+    [
+      Mudbrick.Indirect.Ref.new(ref_number)
+      |> Mudbrick.Indirect.Object.new(Mudbrick.Stream.new(data: stream))
+      | ast_to_mudbrick(rest)
+    ]
   end
 
   defp ast_to_mudbrick(integer: [n]), do: String.to_integer(n)
