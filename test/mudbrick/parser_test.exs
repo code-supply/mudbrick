@@ -123,30 +123,30 @@ defmodule Mudbrick.ParseTextContentTest do
       |> IO.iodata_to_binary()
       |> Parser.parse(:stream)
 
-    [
-      Tf: ["1", "12"],
-      TL: [real: ["14", ".", "399999999999999"]],
-      rg: [integer: ["0"], integer: ["0"], integer: ["0"]],
-      TJ: [
-        glyph_id: "00D5",
-        offset: "24",
-        glyph_id: "00C0",
-        glyph_id: "00ED",
-        glyph_id: "00ED",
-        glyph_id: "00FC",
-        glyph_id: "0195",
-        glyph_id: "01B7",
-        glyph_id: "0138",
-        glyph_id: "00FC",
-        glyph_id: "010F",
-        offset: "12",
-        glyph_id: "00ED",
-        glyph_id: "00BB",
-        glyph_id: "0197"
-      ]
-    ] =
-      stream
-      |> Parser.parse(:text_object)
+    assert [
+             Tf: ["1", "12"],
+             TL: [real: ["14", ".", "399999999999999"]],
+             rg: [integer: ["0"], integer: ["0"], integer: ["0"]],
+             TJ: [
+               glyph_id: "00D5",
+               offset: "24",
+               glyph_id: "00C0",
+               glyph_id: "00ED",
+               glyph_id: "00ED",
+               glyph_id: "00FC",
+               glyph_id: "0195",
+               glyph_id: "01B7",
+               glyph_id: "0138",
+               glyph_id: "00FC",
+               glyph_id: "010F",
+               offset: "12",
+               glyph_id: "00ED",
+               glyph_id: "00BB",
+               glyph_id: "0197"
+             ]
+           ] =
+             stream
+             |> Parser.parse(:text_object)
   end
 end
 
