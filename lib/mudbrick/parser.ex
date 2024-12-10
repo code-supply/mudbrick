@@ -66,6 +66,10 @@ defmodule Mudbrick.Parser.Helpers do
     |> tag(:real)
   end
 
+  def number do
+    choice([integer(), real()])
+  end
+
   def string do
     ignore(string("("))
     |> optional(ascii_string([not: ?(, not: ?)], min: 1))
@@ -85,6 +89,68 @@ defmodule Mudbrick.Parser.Helpers do
     ignore(string("xref"))
     |> ignore(eol())
   end
+
+  def tf do
+    ignore(string("/F"))
+    |> concat(non_negative_integer())
+    |> ignore(whitespace())
+    |> concat(non_negative_integer())
+    |> ignore(whitespace())
+    |> ignore(string("Tf"))
+    |> tag(:Tf)
+  end
+
+  def tl do
+    real()
+    |> ignore(string(" TL"))
+    |> tag(:TL)
+  end
+
+  def rg do
+    number()
+    |> ignore(whitespace())
+    |> concat(number())
+    |> ignore(whitespace())
+    |> concat(number())
+    |> ignore(whitespace())
+    |> ignore(string("rg"))
+    |> tag(:rg)
+  end
+
+  def glyph_id_hex do
+    ignore(string("<"))
+    |> ascii_string([?A..?Z, ?0..?9], min: 1)
+    |> ignore(string(">"))
+    |> unwrap_and_tag(:glyph_id)
+  end
+
+  def tj do
+    ignore(string("["))
+    |> ignore(whitespace())
+    |> repeat(
+      choice([
+        glyph_id_hex(),
+        non_negative_integer() |> unwrap_and_tag(:offset)
+      ])
+      |> ignore(whitespace())
+    )
+    |> ignore(string("]"))
+    |> tag(:TJ)
+  end
+
+  def text_object do
+    ignore(string("BT"))
+    |> ignore(eol())
+    |> repeat(
+      choice([
+        tf(),
+        tl(),
+        rg(),
+        tj()
+      ])
+      |> ignore(whitespace())
+    )
+  end
 end
 
 defmodule Mudbrick.Parser do
@@ -94,6 +160,7 @@ defmodule Mudbrick.Parser do
   defparsec(:boolean, boolean())
   defparsec(:real, real())
   defparsec(:string, string())
+  defparsec(:text_object, text_object())
 
   defparsec(
     :array,

@@ -93,6 +93,63 @@ defmodule Mudbrick.ParserTest do
   end
 end
 
+defmodule Mudbrick.ParseTextContentTest do
+  use ExUnit.Case, async: true
+  use ExUnitProperties
+
+  alias Mudbrick.Parser
+
+  test "can parse text content to AST" do
+    import Mudbrick
+    import Mudbrick.TestHelper
+
+    doc =
+      new(fonts: %{bodoni: bodoni_regular()})
+      |> page()
+      |> text("hello, world!")
+      |> Mudbrick.Document.finish()
+
+    obj =
+      doc.objects
+      |> Enum.find(&(%Mudbrick.ContentStream{} = &1.value))
+
+    [
+      {:dictionary, [pair: [name: "Length", integer: ["150"]]]},
+      "stream",
+      stream
+    ] =
+      obj.value
+      |> Mudbrick.Object.to_iodata()
+      |> IO.iodata_to_binary()
+      |> Parser.parse(:stream)
+
+    [
+      Tf: ["1", "12"],
+      TL: [real: ["14", ".", "399999999999999"]],
+      rg: [integer: ["0"], integer: ["0"], integer: ["0"]],
+      TJ: [
+        glyph_id: "00D5",
+        offset: "24",
+        glyph_id: "00C0",
+        glyph_id: "00ED",
+        glyph_id: "00ED",
+        glyph_id: "00FC",
+        glyph_id: "0195",
+        glyph_id: "01B7",
+        glyph_id: "0138",
+        glyph_id: "00FC",
+        glyph_id: "010F",
+        offset: "12",
+        glyph_id: "00ED",
+        glyph_id: "00BB",
+        glyph_id: "0197"
+      ]
+    ] =
+      stream
+      |> Parser.parse(:text_object)
+  end
+end
+
 defmodule Mudbrick.ParseRoundtripTest do
   use ExUnit.Case, async: true
   use ExUnitProperties
