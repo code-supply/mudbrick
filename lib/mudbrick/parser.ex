@@ -39,13 +39,8 @@ defmodule Mudbrick.Parser.Helpers do
     |> concat(non_negative_integer())
   end
 
-  def positive_integer do
-    ascii_string([?1..?9], min: 1)
-    |> repeat(non_negative_integer())
-  end
-
   def indirect_reference do
-    positive_integer()
+    non_negative_integer()
     |> ignore(whitespace())
     |> concat(non_negative_integer())
     |> ignore(whitespace())
@@ -84,6 +79,11 @@ defmodule Mudbrick.Parser.Helpers do
       string("false") |> replace(false)
     ])
     |> unwrap_and_tag(:boolean)
+  end
+
+  def xref do
+    ignore(string("xref"))
+    |> ignore(eol())
   end
 end
 
@@ -194,11 +194,65 @@ defmodule Mudbrick.Parser do
     |> ignore(ascii_string([not: ?\n], min: 1))
     |> ignore(eol())
     |> repeat(parsec(:indirect_object))
+    |> ignore(string("xref"))
+    |> ignore(eol())
+    |> eventually(ignore(string("trailer") |> concat(eol())))
+    |> parsec(:dictionary)
   )
 
+  defp one(items, ref) do
+    Enum.find(items, &match?(%{ref: ^ref}, &1))
+  end
+
+  defp all(items, refs) do
+    Enum.filter(items, fn
+      %{ref: ref} ->
+        ref in refs
+
+      _ ->
+        false
+    end)
+  end
+
   def parse(iodata) do
-    _ = iodata |> IO.iodata_to_binary() |> pdf()
-    Mudbrick.new()
+    {:ok, parsed_items, _rest, %{}, _, _} =
+      iodata
+      |> IO.iodata_to_binary()
+      |> pdf()
+
+    items = Enum.flat_map(parsed_items, &ast_to_mudbrick/1)
+
+    trailer =
+      Enum.find(items, &match?({:Root, _}, &1))
+
+    {:Root, [catalog_ref]} = trailer
+
+    font_file =
+      Enum.find(
+        items,
+        &match?(%{value: %{additional_entries: %{Subtype: :OpenType}}}, &1)
+      )
+
+    catalog = one(items, catalog_ref)
+
+    [page_tree_ref] = catalog.value[:Pages]
+
+    page_tree = one(items, page_tree_ref)
+
+    page_refs = List.flatten(page_tree.value[:Kids])
+
+    opts = if font_file, do: [fonts: %{F1: font_file.value.data}], else: []
+
+    for page <- all(items, page_refs),
+        reduce: Mudbrick.new(opts) do
+      acc ->
+        [contents_ref] = page.value[:Contents]
+        contents = one(items, contents_ref)
+        contents.value.data |> dbg
+
+        Mudbrick.page(acc)
+    end
+    |> Mudbrick.Document.finish()
   end
 
   def parse(iodata, f) do
@@ -214,6 +268,16 @@ defmodule Mudbrick.Parser do
   defp ast_to_mudbrick(x) when is_tuple(x), do: ast_to_mudbrick([x])
   defp ast_to_mudbrick(array: a), do: Enum.map(a, &ast_to_mudbrick/1)
   defp ast_to_mudbrick(boolean: b), do: b
+  defp ast_to_mudbrick(integer: [n]), do: String.to_integer(n)
+  defp ast_to_mudbrick(integer: ["-", n]), do: -String.to_integer(n)
+  defp ast_to_mudbrick(real: [n, ".", d]), do: String.to_float("#{n}.#{d}")
+  defp ast_to_mudbrick(string: [s]), do: s
+  defp ast_to_mudbrick(name: s), do: String.to_atom(s)
+
+  defp ast_to_mudbrick(pair: [k, v]) do
+    {ast_to_mudbrick(k), ast_to_mudbrick(v)}
+  end
+
   defp ast_to_mudbrick(dictionary: []), do: %{}
 
   defp ast_to_mudbrick(dictionary: pairs) do
@@ -239,7 +303,11 @@ defmodule Mudbrick.Parser do
        ]) do
     [
       Mudbrick.Indirect.Ref.new(ref_number)
-      |> Mudbrick.Indirect.Object.new(pairs)
+      |> Mudbrick.Indirect.Object.new(
+        pairs
+        |> Enum.map(&ast_to_mudbrick/1)
+        |> Enum.into(%{})
+      )
       | ast_to_mudbrick(rest)
     ]
   end
@@ -249,7 +317,7 @@ defmodule Mudbrick.Parser do
           [
             ref_number,
             _version,
-            {:dictionary, _pairs},
+            {:dictionary, pairs},
             "stream",
             stream
           ]}
@@ -257,12 +325,33 @@ defmodule Mudbrick.Parser do
        ]) do
     [
       Mudbrick.Indirect.Ref.new(ref_number)
-      |> Mudbrick.Indirect.Object.new(Mudbrick.Stream.new(data: stream))
+      |> Mudbrick.Indirect.Object.new(
+        Mudbrick.Stream.new(
+          data: stream,
+          additional_entries:
+            pairs
+            |> Enum.map(&ast_to_mudbrick/1)
+            |> Map.new()
+            |> Map.drop([:Length])
+        )
+      )
       | ast_to_mudbrick(rest)
     ]
   end
 
-  defp ast_to_mudbrick(integer: [n]), do: String.to_integer(n)
-  defp ast_to_mudbrick(integer: ["-", n]), do: -String.to_integer(n)
-  defp ast_to_mudbrick(name: s), do: String.to_atom(s)
+  defp ast_to_mudbrick([
+         {:indirect_reference,
+          [
+            ref_number,
+            _version,
+            "R"
+          ]}
+         | _rest
+       ]) do
+    [
+      ref_number
+      |> String.to_integer()
+      |> Mudbrick.Indirect.Ref.new()
+    ]
+  end
 end

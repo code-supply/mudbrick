@@ -119,10 +119,16 @@ defmodule Mudbrick.ParseRoundtripTest do
     #     |> text("hello, world!")
     #     |> Mudbrick.Document.finish()
 
-    #   assert input
-    #          |> Mudbrick.render()
-    #          |> IO.iodata_to_binary()
-    #          |> Parser.parse() == input
+    #   binary =
+    #     input
+    #     |> Mudbrick.render()
+    #     |> IO.iodata_to_binary()
+
+    #   assert binary ==
+    #            binary
+    #            |> Parser.parse()
+    #            |> Mudbrick.render()
+    #            |> IO.iodata_to_binary()
     # end
 
     property "objects" do

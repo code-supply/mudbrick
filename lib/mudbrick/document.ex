@@ -106,6 +106,11 @@ defmodule Mudbrick.Document do
   end
 
   @doc false
+  def finish(doc) do
+    doc
+  end
+
+  @doc false
   def root_page_tree(doc) do
     find_object(doc, &match?(%PageTree{}, &1))
   end
