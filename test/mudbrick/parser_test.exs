@@ -136,7 +136,8 @@ defmodule Mudbrick.ParseRoundtripTest do
         one_of([
           atom(:alphanumeric),
           boolean(),
-          integer()
+          integer(),
+          float(min: -999, max: 999)
         ])
 
       check all input <-

@@ -271,6 +271,7 @@ defmodule Mudbrick.Parser do
   defp ast_to_mudbrick(integer: [n]), do: String.to_integer(n)
   defp ast_to_mudbrick(integer: ["-", n]), do: -String.to_integer(n)
   defp ast_to_mudbrick(real: [n, ".", d]), do: String.to_float("#{n}.#{d}")
+  defp ast_to_mudbrick(real: ["-" | rest]), do: -ast_to_mudbrick(real: rest)
   defp ast_to_mudbrick(string: [s]), do: s
   defp ast_to_mudbrick(name: s), do: String.to_atom(s)
 
