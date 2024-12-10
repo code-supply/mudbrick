@@ -138,7 +138,7 @@ defmodule Mudbrick.Parser.Helpers do
     |> tag(:TJ)
   end
 
-  def text_object do
+  def text_block do
     ignore(string("BT"))
     |> ignore(eol())
     |> repeat(
@@ -150,6 +150,7 @@ defmodule Mudbrick.Parser.Helpers do
       ])
       |> ignore(whitespace())
     )
+    |> tag(:text_block)
   end
 end
 
@@ -160,7 +161,7 @@ defmodule Mudbrick.Parser do
   defparsec(:boolean, boolean())
   defparsec(:real, real())
   defparsec(:string, string())
-  defparsec(:text_object, text_object())
+  defparsec(:text_block, text_block())
 
   defparsec(
     :array,
@@ -331,6 +332,20 @@ defmodule Mudbrick.Parser do
   end
 
   def to_mudbrick(iodata, f), do: iodata |> parse(f) |> ast_to_mudbrick()
+
+  # defp ast_to_mudbrick(text_block: operations) do
+  #   alias Mudbrick.ContentStream.Tf
+
+  #   operations
+  #   |> Enum.map(fn
+  #     {:Tf, [index, size]} ->
+  #       %Tf{font: }
+
+  #     op ->
+  #       dbg(op)
+  #       "hi"
+  #   end)
+  # end
 
   defp ast_to_mudbrick(x) when is_tuple(x), do: ast_to_mudbrick([x])
   defp ast_to_mudbrick(array: a), do: Enum.map(a, &ast_to_mudbrick/1)
