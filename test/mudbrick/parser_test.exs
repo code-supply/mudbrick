@@ -1,6 +1,7 @@
 defmodule Mudbrick.ParserTest do
   use ExUnit.Case, async: true
 
+  alias Mudbrick.Indirect
   alias Mudbrick.Parser
 
   describe "streams" do
@@ -12,8 +13,8 @@ defmodule Mudbrick.ParserTest do
         )
 
       obj =
-        Mudbrick.Indirect.Ref.new(1)
-        |> Mudbrick.Indirect.Object.new(stream)
+        Indirect.Ref.new(1)
+        |> Indirect.Object.new(stream)
 
       assert Parser.parse(Mudbrick.Object.to_iodata(obj), :indirect_object) == [
                indirect_object: [
@@ -38,8 +39,8 @@ defmodule Mudbrick.ParserTest do
         )
 
       obj =
-        Mudbrick.Indirect.Ref.new(1)
-        |> Mudbrick.Indirect.Object.new(stream)
+        Indirect.Ref.new(1)
+        |> Indirect.Object.new(stream)
 
       assert Parser.parse(Mudbrick.Object.to_iodata(obj), :indirect_object) == [
                indirect_object: [

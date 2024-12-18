@@ -18,6 +18,8 @@ defmodule Mudbrick.Parser do
     W
   }
 
+  alias Mudbrick.Indirect
+
   def parse(iodata) do
     {:ok, parsed_items, _rest, %{}, _, _} =
       iodata
@@ -25,63 +27,12 @@ defmodule Mudbrick.Parser do
       |> pdf()
 
     items = Enum.flat_map(parsed_items, &ast_to_mudbrick/1)
+    page_refs = page_refs(items)
+    font_files = Enum.filter(items, &font?/1)
+    image_files = Enum.filter(items, &image?/1)
+    fonts = decompressed_resources_option(font_files, "F")
+    images = decompressed_resources_option(image_files, "I")
 
-    trailer =
-      Enum.find(items, &match?({:Root, _}, &1))
-
-    {:Root, [catalog_ref]} = trailer
-
-    font_files =
-      Enum.filter(
-        items,
-        &match?(%{value: %{additional_entries: %{Subtype: :OpenType}}}, &1)
-      )
-
-    image_files =
-      Enum.filter(
-        items,
-        &match?(%{value: %{additional_entries: %{Subtype: :Image}}}, &1)
-      )
-
-    catalog = one(items, catalog_ref)
-
-    [page_tree_ref] = catalog.value[:Pages]
-
-    page_tree = one(items, page_tree_ref)
-
-    page_refs = List.flatten(page_tree.value[:Kids])
-
-    {_, fonts} =
-      for font_file <- font_files, reduce: {1, %{}} do
-        {n, fonts} ->
-          if font_file.value.compress do
-            {n + 1,
-             Map.put(
-               fonts,
-               :"F#{n}",
-               Mudbrick.decompress(font_file.value.data) |> IO.iodata_to_binary()
-             )}
-          else
-            {n + 1, Map.put(fonts, :"F#{n}", font_file.value.data)}
-          end
-      end
-
-    {_, images} =
-      for image_file <- image_files, reduce: {1, %{}} do
-        {n, images} ->
-          if image_file.value.compress do
-            {n + 1,
-             Map.put(
-               images,
-               :"I#{n}",
-               Mudbrick.decompress(image_file.value.data) |> IO.iodata_to_binary()
-             )}
-          else
-            {n + 1, Map.put(images, :"I#{n}", image_file.value.data)}
-          end
-      end
-
-    # TODO: be smarter about detecting compression - this requires a font
     compress? = Enum.any?(font_files, fn f -> f.value.compress end)
 
     opts = []
@@ -91,28 +42,7 @@ defmodule Mudbrick.Parser do
 
     for page <- all(items, page_refs), reduce: Mudbrick.new(opts) do
       acc ->
-        [contents_ref] = page.value[:Contents]
-
-        contents = one(items, contents_ref)
-
-        stream = contents.value
-
-        data =
-          if stream.compress do
-            Mudbrick.decompress(stream.data)
-          else
-            stream.data
-          end
-
-        operations =
-          if data == "" do
-            []
-          else
-            %Mudbrick.ContentStream{operations: operations} =
-              to_mudbrick(data, :content_blocks)
-
-            operations
-          end
+        operations = operations(items, page)
 
         [_, _, w, h] = page.value[:MediaBox]
 
@@ -297,6 +227,65 @@ defmodule Mudbrick.Parser do
       |> parse(f)
       |> ast_to_mudbrick()
 
+  defp decompressed_resources_option(files, prefix) do
+    {_, resources} =
+      for file <- files, reduce: {1, %{}} do
+        {n, resources} ->
+          if file.value.compress do
+            {n + 1,
+             Map.put(
+               resources,
+               :"#{prefix}#{n}",
+               Mudbrick.decompress(file.value.data) |> IO.iodata_to_binary()
+             )}
+          else
+            {n + 1, Map.put(resources, :"#{prefix}#{n}", file.value.data)}
+          end
+      end
+
+    resources
+  end
+
+  defp page_refs(items) do
+    {:Root, [catalog_ref]} = Enum.find(items, &match?({:Root, _}, &1))
+    catalog = one(items, catalog_ref)
+    [page_tree_ref] = catalog.value[:Pages]
+    page_tree = one(items, page_tree_ref)
+    List.flatten(page_tree.value[:Kids])
+  end
+
+  defp operations(items, page) do
+    [contents_ref] = page.value[:Contents]
+
+    contents = one(items, contents_ref)
+
+    stream = contents.value
+
+    data =
+      if stream.compress do
+        Mudbrick.decompress(stream.data)
+      else
+        stream.data
+      end
+
+    if data == "" do
+      []
+    else
+      %Mudbrick.ContentStream{operations: operations} =
+        to_mudbrick(data, :content_blocks)
+
+      operations
+    end
+  end
+
+  defp font?(item) do
+    match?(%{value: %{additional_entries: %{Subtype: :OpenType}}}, item)
+  end
+
+  defp image?(item) do
+    match?(%{value: %{additional_entries: %{Subtype: :Image}}}, item)
+  end
+
   defp one(items, ref) do
     Enum.find(items, &match?(%{ref: ^ref}, &1))
   end
@@ -427,8 +416,8 @@ defmodule Mudbrick.Parser do
          | rest
        ]) do
     [
-      Mudbrick.Indirect.Ref.new(ref_number)
-      |> Mudbrick.Indirect.Object.new(
+      Indirect.Ref.new(ref_number)
+      |> Indirect.Object.new(
         pairs
         |> Enum.map(&ast_to_mudbrick/1)
         |> Enum.into(%{})
@@ -455,8 +444,8 @@ defmodule Mudbrick.Parser do
       |> Map.drop([:Length])
 
     [
-      Mudbrick.Indirect.Ref.new(ref_number)
-      |> Mudbrick.Indirect.Object.new(
+      Indirect.Ref.new(ref_number)
+      |> Indirect.Object.new(
         Mudbrick.Stream.new(
           compress: additional_entries[:Filter] == [:FlateDecode],
           data: stream,
@@ -479,7 +468,7 @@ defmodule Mudbrick.Parser do
     [
       ref_number
       |> String.to_integer()
-      |> Mudbrick.Indirect.Ref.new()
+      |> Indirect.Ref.new()
     ]
   end
 end
