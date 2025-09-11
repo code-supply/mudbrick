@@ -116,8 +116,11 @@ defmodule Mudbrick.Font do
         offset = normal_width - width_when_kerned
         {Mudbrick.to_hex(glyph_id), offset}
 
-      {glyph_id, {:std_width, _, _, _width, _}} ->
+      {glyph_id, {:std_width, _, _, _, _}} ->
         Mudbrick.to_hex(glyph_id)
+
+        {glyph_id, {:pos, _, _, _, _}} ->
+          Mudbrick.to_hex(glyph_id)
     end)
   end
 
