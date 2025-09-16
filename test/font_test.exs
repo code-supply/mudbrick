@@ -106,7 +106,7 @@ defmodule Mudbrick.FontTest do
   test "kerned handles Japanese with :pos tuple" do
     doc = Mudbrick.new(fonts: %{bodoni: bodoni_regular()})
     font = Document.find_object(doc, &match?(%Font{}, &1)).value
-    
+
     result = Font.kerned(font, "日本語")
     assert is_list(result)
     assert Enum.all?(result, &(is_binary(&1) or is_tuple(&1)))
