@@ -12,7 +12,7 @@ defmodule Mudbrick.MixProject do
       elixir: "~> 1.17",
       package: package(),
       start_permanent: Mix.env() == :prod,
-      version: "0.9.0",
+      version: "0.9.1",
 
       # Docs
       source_url: @scm_url,
