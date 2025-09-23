@@ -2,7 +2,7 @@
 
 [API Documentation](https://hexdocs.pm/mudbrick/Mudbrick.html)
 
-Early-stages PDF generator, beelining for:
+PDF generator, beelining for:
 
 - PDF 2.0 support.
 - In-process, pure functional approach.
