@@ -4,6 +4,8 @@ defmodule Mudbrick.Path.Output do
   defstruct operations: []
 
   alias Mudbrick.ContentStream.{
+    B,
+    F,
     L,
     M,
     QPop,
@@ -38,7 +40,7 @@ defmodule Mudbrick.Path.Output do
               |> add(%L{coords: line.to})
               |> add(%S{})
 
-            %Mudbrick.Path.Rectangle{} = rect ->
+            %Mudbrick.Path.Rectangle{fill: nil} = rect ->
               {r, g, b} = rect.colour
 
               acc
@@ -49,6 +51,30 @@ defmodule Mudbrick.Path.Output do
                 dimensions: rect.dimensions
               })
               |> add(%S{})
+
+            %Mudbrick.Path.Rectangle{} = rect ->
+              # A fill colour was given. `rg` sets the non-stroking colour and
+              # `f` paints the interior. With `stroke: true` as well, `B` fills
+              # and strokes in one operation so the two stay aligned.
+              {fr, fg, fb} = rect.fill
+              {r, g, b} = rect.colour
+
+              acc
+              |> add(Rg.new(stroking: false, r: fr, g: fg, b: fb))
+              |> then(fn output ->
+                if rect.stroke do
+                  output
+                  |> add(Rg.new(stroking: true, r: r, g: g, b: b))
+                  |> add(%W{width: rect.line_width})
+                else
+                  output
+                end
+              end)
+              |> add(%Re{
+                lower_left: rect.lower_left,
+                dimensions: rect.dimensions
+              })
+              |> add(if rect.stroke, do: %B{}, else: %F{})
           end
       end
     end)

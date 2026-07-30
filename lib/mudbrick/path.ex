@@ -5,21 +5,35 @@ defmodule Mudbrick.Path do
             | {:dimensions, Mudbrick.coords()}
             | {:line_width, number()}
             | {:colour, Mudbrick.colour()}
+            | {:fill, Mudbrick.colour() | nil}
+            | {:stroke, boolean()}
 
     @type options :: [option()]
 
+    @typedoc """
+    Without `:fill` a rectangle is stroked in `:colour`, as it always was.
+
+    Given `:fill`, the interior is painted in that colour and the outline is
+    dropped — which is what backgrounds, bars and QR modules want. Set
+    `stroke: true` alongside it to get both, painted in one operation so the
+    two stay aligned.
+    """
     @type t :: %__MODULE__{
             lower_left: Mudbrick.coords(),
             dimensions: Mudbrick.coords(),
             line_width: number(),
-            colour: Mudbrick.colour()
+            colour: Mudbrick.colour(),
+            fill: Mudbrick.colour() | nil,
+            stroke: boolean()
           }
 
     @enforce_keys [:lower_left, :dimensions]
     defstruct lower_left: nil,
               dimensions: nil,
               line_width: 1,
-              colour: {0, 0, 0}
+              colour: {0, 0, 0},
+              fill: nil,
+              stroke: false
 
     @doc false
     @spec new(options()) :: t()

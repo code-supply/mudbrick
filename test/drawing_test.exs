@@ -46,6 +46,95 @@ defmodule Mudbrick.DrawingTest do
              |> Mudbrick.TestHelper.operations()
   end
 
+  test "a fill colour paints the rectangle's interior" do
+    import Mudbrick
+
+    assert [
+             "q",
+             "0 0.5 1 rg",
+             "10 10 40 20 re",
+             "f",
+             "Q"
+           ] =
+             new()
+             |> page()
+             |> path(fn path ->
+               Path.rectangle(path,
+                 lower_left: {10, 10},
+                 dimensions: {40, 20},
+                 fill: {0, 0.5, 1}
+               )
+             end)
+             |> Mudbrick.TestHelper.output()
+             |> Mudbrick.TestHelper.operations()
+  end
+
+  test "a fill and an outline colour together fill and stroke in one operation" do
+    import Mudbrick
+
+    assert [
+             "q",
+             "1 1 0 rg",
+             "0 0 0 RG",
+             "2 w",
+             "10 10 40 20 re",
+             "B",
+             "Q"
+           ] =
+             new()
+             |> page()
+             |> path(fn path ->
+               Path.rectangle(path,
+                 lower_left: {10, 10},
+                 dimensions: {40, 20},
+                 fill: {1, 1, 0},
+                 colour: {0, 0, 0},
+                 stroke: true,
+                 line_width: 2
+               )
+             end)
+             |> Mudbrick.TestHelper.output()
+             |> Mudbrick.TestHelper.operations()
+  end
+
+  test "without a fill colour a rectangle is still stroked only" do
+    import Mudbrick
+
+    ops =
+      new()
+      |> page()
+      |> path(fn path ->
+        Path.rectangle(path, lower_left: {0, 0}, dimensions: {50, 60})
+      end)
+      |> Mudbrick.TestHelper.output()
+      |> Mudbrick.TestHelper.operations()
+
+    assert "S" in ops
+    refute "f" in ops
+  end
+
+  test "many filled rectangles compose, as a QR code or a bar chart would" do
+    import Mudbrick
+
+    ops =
+      new()
+      |> page()
+      |> path(fn path ->
+        for i <- 0..9, reduce: path do
+          acc ->
+            Path.rectangle(acc,
+              lower_left: {i * 4, 0},
+              dimensions: {3, 3},
+              fill: {0, 0, 0}
+            )
+        end
+      end)
+      |> Mudbrick.TestHelper.output()
+      |> Mudbrick.TestHelper.operations()
+
+    assert Enum.count(ops, &(&1 == "f")) == 10
+  end
+
   test "can construct a rectangle" do
     import Path
 
